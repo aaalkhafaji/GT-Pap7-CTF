@@ -1,0 +1,92 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import zipfile
+import os
+from google.colab import files
+
+def generate_emergent_filter_figure():
+    """Generates the comparison between Classical Butterworth and the CTF Equilibrium."""
+    # Frequency range (e.g., radial distance from center in Fourier domain)
+    k = np.linspace(0, 120, 500)
+    
+    # --- 1. Classical Butterworth Filter ---
+    # Heuristic parameters chosen by an engineer
+    D0 = 80.0  # Cutoff frequency
+    N = 8      # Order of the filter (steepness)
+    butterworth_response = 1.0 / (1.0 + (k / D0)**(2 * N))
+    
+    # --- 2. Congestion-Theoretic Filter (CTF) Equilibrium ---
+    # Driven strictly by physical constraints (Wardrop's Principle)
+    # MTF assumed to decay as a Gaussian: exp(-k^2 / (2 * sigma^2))
+    sigma = 60.0
+    mtf_k = np.exp(-(k**2) / (2 * sigma**2))
+    optical_latency = 1.0 / mtf_k
+    
+    # Hardware constraints and game parameters
+    lambda_eq = 5.0    # The Wardrop Equilibrium latency maximum
+    gamma = 8.0        # Structural clipping penalty factor
+    rho = 2.0          # Non-linearity
+    K_k = 1.0          # Normalized hardware capacity
+    
+    # Calculate equilibrium traffic (x_k^*) based on Equation 2 (Section 3)
+    # x_k^* = K_k * [ (lambda - 1/MTF) / gamma ]^(1/rho)
+    # If optical latency exceeds lambda, players opt out (traffic = 0)
+    surviving_margin = lambda_eq - optical_latency
+    surviving_margin[surviving_margin < 0] = 0  # Stopband condition
+    
+    ctf_equilibrium = K_k * (surviving_margin / gamma)**(1.0 / rho)
+    
+    # Normalize CTF for direct shape comparison with Butterworth
+    ctf_equilibrium = ctf_equilibrium / np.max(ctf_equilibrium)
+
+    # --- Plotting ---
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), dpi=300)
+    
+    # Left Subplot: Classical Butterworth
+    ax1.plot(k, butterworth_response, color='red', linewidth=3, label=f"Butterworth (Order={N})")
+    ax1.axvline(x=D0, color='black', linestyle=':', linewidth=2, label="Heuristic Cutoff ($D_0$)")
+    ax1.fill_between(k, 0, butterworth_response, color='red', alpha=0.1)
+    ax1.set_title("Classical Low-Pass Filter\n(Heuristic & Rigid)", fontweight='bold', fontsize=14)
+    ax1.set_xlabel("Spatial Frequency ($k$)", fontsize=12)
+    ax1.set_ylabel("Normalized Passband Retention", fontsize=12)
+    ax1.set_ylim(0, 1.1)
+    ax1.set_xlim(0, 120)
+    ax1.grid(True, linestyle=':', alpha=0.6)
+    ax1.legend(loc="upper right", fontsize=11)
+    
+    # Right Subplot: Congestion-Theoretic Filter
+    ax2.plot(k, ctf_equilibrium, color='green', linewidth=3, label="CTF Wardrop Equilibrium ($x_k^*$)")
+    ax2.plot(k, mtf_k, color='blue', linestyle='-.', linewidth=2, alpha=0.4, label="Optical MTF Baseline")
+    # Find the organic cutoff where CTF hits 0
+    organic_cutoff = k[np.argmin(ctf_equilibrium > 0)]
+    ax2.axvline(x=organic_cutoff, color='black', linestyle=':', linewidth=2, label="Emergent Stopband")
+    ax2.fill_between(k, 0, ctf_equilibrium, color='green', alpha=0.15)
+    ax2.set_title("Congestion-Theoretic Filter\n(Organic Wardrop Equilibrium)", fontweight='bold', fontsize=14)
+    ax2.set_xlabel("Spatial Frequency ($k$)", fontsize=12)
+    ax2.set_ylim(0, 1.1)
+    ax2.set_xlim(0, 120)
+    ax2.grid(True, linestyle=':', alpha=0.6)
+    ax2.legend(loc="upper right", fontsize=11)
+    
+    plt.tight_layout()
+    filename = 'fig_emergent_filter.png'
+    plt.savefig(filename, bbox_inches='tight')
+    plt.close()
+    return filename
+
+def package_and_download(filename, zip_name):
+    """Zips the specified file and triggers a Colab download."""
+    with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as archive:
+        if os.path.exists(filename):
+            archive.write(filename)
+    
+    print(f"Successfully packaged {filename} into {zip_name}. Initiating download...")
+    files.download(zip_name)
+
+if __name__ == "__main__":
+    # Generate the figure
+    fig_file = generate_emergent_filter_figure()
+    
+    # Package and download it as a zip
+    zip_filename = 'paper7_sec3_emergent_filter.zip'
+    package_and_download(fig_file, zip_filename)
