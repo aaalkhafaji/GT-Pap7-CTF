@@ -1,0 +1,73 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import zipfile
+import os
+from google.colab import files
+
+def generate_latency_figure():
+    """Generates the static MTF vs Dynamic Hardware Congestion latency plots."""
+    # Define the spectral traffic load (x_j) from 0 to 300
+    # The 8-bit hardware boundary is at 255
+    x_j = np.linspace(0, 300, 500)
+    K_j = 255.0  # Hardware saturation capacity
+    
+    # 1. Pure MTF Latency (Static Cost)
+    # For a specific frequency channel j, the optical latency 1/MTF is constant 
+    mtf_baseline = 2.0
+    cost_static = np.full_like(x_j, mtf_baseline)
+    
+    # 2. Congestion-Theoretic Latency (Dynamic Cost)
+    # Adds a severe non-linear penalty as traffic approaches and breaches K_j
+    gamma = 15.0  # Structural clipping penalty factor
+    rho = 6.0     # Non-linearity of the sensor's saturation response
+    hardware_penalty = gamma * (x_j / K_j)**rho
+    cost_dynamic = mtf_baseline + hardware_penalty
+
+    # Create the plots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), dpi=300)
+    
+    # Left Subplot: Pure MTF Latency
+    ax1.plot(x_j, cost_static, color='blue', linewidth=3, label="Optical Latency ($1/MTF$)")
+    ax1.axvline(x=K_j, color='red', linestyle='--', linewidth=2, alpha=0.7, label="Hardware Capacity ($K_j = 255$)")
+    ax1.set_title("Pure MTF Latency\n(Inessential Game)", fontweight='bold', fontsize=14)
+    ax1.set_xlabel("Spectral Traffic Volume ($x_j$)", fontsize=12)
+    ax1.set_ylabel("Channel Latency Cost ($c_j$)", fontsize=12)
+    ax1.set_ylim(0, 25)
+    ax1.set_xlim(0, 300)
+    ax1.grid(True, linestyle=':', alpha=0.6)
+    ax1.legend(loc="upper left", fontsize=11)
+    
+    # Right Subplot: Congestion-Theoretic Latency
+    ax2.plot(x_j, cost_dynamic, color='green', linewidth=3, label="Congestion-Theoretic Latency")
+    ax2.plot(x_j, cost_static, color='blue', linestyle='-.', linewidth=2, alpha=0.5, label="Optical Baseline")
+    ax2.axvline(x=K_j, color='red', linestyle='--', linewidth=2, alpha=0.7, label="Hardware Capacity ($K_j = 255$)")
+    ax2.set_title("Congestion-Theoretic Latency\n(Non-Cooperative Routing Game)", fontweight='bold', fontsize=14)
+    ax2.set_xlabel("Spectral Traffic Volume ($x_j$)", fontsize=12)
+    ax2.set_ylim(0, 25)
+    ax2.set_xlim(0, 300)
+    ax2.grid(True, linestyle=':', alpha=0.6)
+    ax2.legend(loc="upper left", fontsize=11)
+    
+    # Formatting and saving
+    plt.tight_layout()
+    filename = 'fig_latency_functions.png'
+    plt.savefig(filename, bbox_inches='tight')
+    plt.close()
+    return filename
+
+def package_and_download(filename, zip_name):
+    """Zips the specified file and triggers a Colab download."""
+    with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as archive:
+        if os.path.exists(filename):
+            archive.write(filename)
+    
+    print(f"Successfully packaged {filename} into {zip_name}. Initiating download...")
+    files.download(zip_name)
+
+if __name__ == "__main__":
+    # 1. Generate the figure
+    fig_file = generate_latency_figure()
+    
+    # 2. Package and download it as a zip
+    zip_filename = 'paper7_sec2_latency_functions.zip'
+    package_and_download(fig_file, zip_filename)
